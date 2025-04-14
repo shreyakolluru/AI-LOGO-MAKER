@@ -1,17 +1,18 @@
+// In /api/generate-ideas/route.js
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Gemini with your API key
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
 export async function POST(request) {
   try {
     // 1. Log the API key to ensure it's loaded
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      console.error("API Key Missing: GOOGLE_GENERATIVE_AI_API_KEY is not set.");
+    if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+      console.error("API Key Missing: NEXT_PUBLIC_GEMINI_API_KEY is not set.");
       throw new Error("API key is not configured.");
     }
-    console.log("API Key Loaded:", process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+    console.log("API Key Loaded:", process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
     // 2. Get user input from request
     const { prompt, industry, style, logoTitle, logoDesc } = await request.json();
@@ -30,16 +31,26 @@ export async function POST(request) {
 
     // 5. Construct dynamic prompt using all user inputs
     const fullPrompt = `
-      You are a creative logo designer. Generate exactly 6 unique logo design ideas for a company named "${logoTitle}" with the following description: "${logoDesc}".
-      The company operates in the ${industry || "tech"} industry, and the preferred style is ${style || "modern minimalist"}.
-      Format requirements:
-      - Return ONLY a bulleted list with exactly 6 items
-      - No numbering or additional text
-      - Each idea should be 5-8 words
-      Example:
-      - Abstract geometric mountain silhouette
-      - Mascot owl with glasses
-    `;
+  You are a creative logo designer. Generate exactly 6 unique logo design ideas for a company named "${logoTitle}" with the following description: "${logoDesc}".
+  The company operates in the ${industry || "tech"} industry, and the preferred style is ${style || "modern minimalist"}.
+
+  **IMPORTANT FORMATTING RULES:**
+  - You MUST return ONLY a bulleted list.
+  - Each item in the list MUST start with a hyphen and a space ('- ').
+  - There MUST be exactly 6 items in the list.
+  - Each idea MUST be concise, between 5 and 8 words long.
+  - Do NOT include any introductory text, concluding text, explanations, or numbering.
+
+  **Example of CORRECT output format:**
+  - Abstract geometric mountain silhouette concept
+  - Friendly mascot owl wearing glasses logo
+  - Minimalist wave icon in circle design
+  - Vintage letterpress style wordmark idea
+  - Hand-drawn leaf motif emblem design
+  - Tech circuit board pattern mark
+
+  Generate the 6 ideas now based on the inputs provided.
+`;
     console.log("Full Prompt:", fullPrompt);
 
     // 6. Generate content with a single attempt
@@ -47,6 +58,18 @@ export async function POST(request) {
     try {
       const result = await model.generateContent(fullPrompt);
       const response = await result.response;
+
+      // *** ADD THIS CHECK ***
+      if (response.promptFeedback?.blockReason) {
+        console.error('Gemini Response Blocked:', response.promptFeedback.blockReason);
+        // Return a specific error for blocking
+        return NextResponse.json(
+          { error: `Content generation blocked: ${response.promptFeedback.blockReason}` },
+          { status: 400 }
+        );
+      }
+      // *** END ADDED CHECK ***
+
       const text = response.text();
       console.log('Gemini Response:', text);
 
